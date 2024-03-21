@@ -1,4 +1,6 @@
-import csv
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -7,44 +9,34 @@ from matplotlib.patches import PathPatch
 from copy import deepcopy
 
 
-def load_csv(filename):
-    with open(filename, "r") as f:
-        reader = csv.reader(f)
-        data_list = list(reader)
-
-    results = []
-    for i in range(1, len(data_list)):
-        result = []
-        for j in data_list[i]:
-            if "." in j or "e" in j:
-                try:
-                    result.append(float(j))
-                except ValueError:
-                    result.append(j)
-            else:
-                try:
-                    result.append(int(j))
-                except ValueError:
-                    result.append(j)
-
-        results.append(result)
-
-    return results, data_list[0]
-
-
 def check_data(data, labels):
+    """Check whether each row of data array has the same length as labels."""
     for i in range(len(data)):
         assert len(data[i]) is len(labels), "data dimension (%d) does not " \
             "match with labels (%d)" % (len(data[i]), len(labels))
 
 
-def check_formatting(yattribute, labels):
-    if yattribute:
-        assert len(yattribute) is len(labels), "dimension (%d) does not " \
-            "match with labels (%d)" % (len(yattribute), len(labels))
+def check_styles(data, styles):
+    """Check whether each row of data array has a provided style."""
+    if styles:
+        assert len(data) is len(styles), "data dimension (%d) does not " \
+            "match with styles (%d)" % (len(data), len(styles))
     else:
-        yattribute = [[]] * len(labels)
-    return yattribute
+        return [dict(color="steelblue",
+                     linestyle="solid",
+                     linewidth=0.25,
+                     clip_on=False,)] * len(data)
+    return styles
+
+
+def check_formatting(ytype, labels):
+    """Check whether ytype and labels are compatible (lists of same dimension), and construct an ytype if ytype is not provided."""
+    if ytype:
+        assert len(ytype) is len(labels), "dimension (%d) does not " \
+            "match with labels (%d)" % (len(ytype), len(labels))
+    else:
+        ytype = [[]] * len(labels)
+    return ytype
 
 
 def set_ytype(ytype, data, colorbar):
@@ -95,6 +87,7 @@ def set_ylim(ylim, data):
 
 
 def get_score(data, ylim):
+    """Construct a score based on the last row of data."""
     ymin = ylim[len(ylim) - 1][0]
     ymax = ylim[len(ylim) - 1][1]
     score = (np.copy(data[len(ylim) - 1, :]) - ymin) / (ymax - ymin)
@@ -103,6 +96,7 @@ def get_score(data, ylim):
 
 # Rescale data of secondary y-axes to scale of first y-axis
 def rescale_data(data, ytype, ylim):
+    """Rescale the data according the ytype (in particular, in case one wants a log-scale."""
     min0 = ylim[0][0]
     max0 = ylim[0][1]
     scale = max0 - min0
@@ -120,6 +114,7 @@ def rescale_data(data, ytype, ylim):
 
 
 def get_path(data, i):
+    """Construct the Path object associated to the i-th column of data."""
     n = data.shape[0] # number of y-axes
     verts = list(zip([x for x in np.linspace(0, n - 1, n * 3 - 2)], 
         np.repeat(data[:, i], 3)[1:-1]))
@@ -128,19 +123,21 @@ def get_path(data, i):
     return path
 
 
-def pcp(data, 
-        labels, 
-        ytype=None, 
-        ylim=None, 
-        ylabels=None, 
-        figsize=(10, 5), 
-        rect=[0.125, 0.1, 0.75, 0.8], 
-        curves=True,
-        alpha=1.0,
-        colorbar=True, 
-        colorbar_width=0.02,
-        cmap=plt.get_cmap("inferno")
-        ):
+def parallel_coordinates(
+    data,
+    labels,
+    styles=[],
+    ytype=None,
+    ylim=None,
+    ylabels=None,
+    figsize=(10, 5),
+    rect=[0.125, 0.1, 0.75, 0.8],
+    curves=True,
+    alpha=1.0,
+    colorbar=True,
+    colorbar_width=0.02,
+    colormap=plt.get_cmap("inferno"),
+):
     """
     Parallel Coordinates Plot 
 
@@ -150,6 +147,8 @@ def pcp(data,
         Inner arrays containing data for each curve.
     labels: list
         Labels for y-axes.
+    styles: list, optional
+        linestyle for each data curve, default is the same style (blue curve)
     ytype: list, optional
         Default "None" allows linear axes for numerical values and categorial 
         axes for data of type string. If ytype is passed, logarithmic axes are 
@@ -165,34 +164,35 @@ def pcp(data,
         Width, height in inches.
     rect: array, optional
         [left, bottom, width, height], defines the position of the figure on
-        the canvas. 
+        the canvas. This is also the position of the left-most axe.
     curves: bool, optional
-        If True, B-spline curve is drawn.
+        If True, B-spline curve is drawn. Default is True.
     alpha: float, optional
-        Alpha value for blending the curves.
+        Alpha value for blending the curves. In use only when curves is True.
     colorbar: bool, optional
-        If True, colorbar is drawn.
+        If True, colorbar is drawn using the last value (column) of data.
     colorbar_width: float, optional
-        Defines the width of the colorbar.
-    cmap: matplotlib.colors.Colormap, optional
-        Specify colors for colorbar.
-    
+        Defines the width of the colorbar. Default is 0.02.
+    colormap: matplotlib.colors.Colormap, optional
+        Specify colors for colorbar. Default is inferno.
+
     Returns
     -------
     `~matplotlib.figure.Figure`
     """
-    
+
     [left, bottom, width, height] = rect
     data = deepcopy(data)
-    
+
     # Check data
     check_data(data, labels)
+    styles = check_styles(data, styles)
     ytype = check_formatting(ytype, labels)
     ylim = check_formatting(ylim, labels)
     ylabels = check_formatting(ylabels, labels)
 
     # Setup data
-    ytype = set_ytype(ytype, data, colorbar) 
+    ytype = set_ytype(ytype, data, colorbar)
     ylabels = set_ylabels(ylabels, data, ytype)
     data = replace_str_values(data, ytype, ylabels)
     ylim = set_ylim(ylim, data)
@@ -207,17 +207,24 @@ def pcp(data,
     # Plot curves
     for i in range(data.shape[1]):
         if colorbar:
-            color = cmap(score[i])
+            style = dict(color=colormap(score[i]),
+                         linestyle="solid",
+                         linewidth=1.25,
+                         clip_on=False)
         else:
-            color = "blue"
-
+            style = styles[i]
         if curves:
             path = get_path(data, i)
-            patch = PathPatch(path, facecolor="None", lw=1.5, alpha=alpha, 
-                    edgecolor=color, clip_on=False)
+            patch = PathPatch(
+                path,
+                facecolor="None",
+                lw=style['linewidth'],
+                alpha=alpha,
+                edgecolor=style['color'],
+                clip_on=style['clip_on'])
             ax0.add_patch(patch)
         else:
-            ax0.plot(data[:, i], color=color, alpha=alpha, clip_on=False)
+            ax0.plot(data[:, i], **style)
 
     # Format x-axis
     ax0.xaxis.tick_top()
@@ -232,7 +239,7 @@ def pcp(data,
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
         ax.spines["bottom"].set_visible(False)
-        
+
         ax.yaxis.set_ticks_position("left")
         ax.set_ylim(ylim[i])
         if ytype[i] == "log":
@@ -241,12 +248,14 @@ def pcp(data,
             ax.set_yticks(range(len(ylabels[i])))
         if ylabels[i]:
             ax.set_yticklabels(ylabels[i])
-        
+
     if colorbar:
         bar = fig.add_axes([left + width, bottom, colorbar_width, height])
         norm = mpl.colors.Normalize(vmin=ylim[i][0], vmax=ylim[i][1])
-        mpl.colorbar.ColorbarBase(bar, cmap=cmap, norm=norm, 
-            orientation="vertical")
+        mpl.colorbar.ColorbarBase(bar,
+                                  cmap=colormap,
+                                  norm=norm,
+                                  orientation="vertical")
         bar.tick_params(size=0)
         bar.set_yticklabels([])
 
@@ -254,12 +263,26 @@ def pcp(data,
 
 
 if __name__ == "__main__":
-    # Minimal working example
-    results = [["ResNet", 0.0001, 4, 0.2],
-               ["ResNet", 0.0003, 8, 1.0],
-               ["DenseNet", 0.0005, 4, 0.65],
-               ["DenseNet", 0.0007, 8, 0.45],
-               ["DenseNet", 0.001, 2, 0.8]]
+    # Minimal working examples
+    data = [["ResNet", 0.0001, 4, 0.2],
+            ["ResNet", 0.0003, 8, 1.0],
+            ["DenseNet", 0.0005, 4, 0.65],
+            ["DenseNet", 0.0007, 8, 0.45],
+            ["DenseNet", 0.001, 2, 0.8]]
     labels = ["Network", "Learning rate", "Batchsize", "F-Score"]
-    pcp(results, labels)
+    parallel_coordinates(data, labels)
+    plt.show()
+    parallel_coordinates(data, labels, curves=False)
+    plt.show()
+    parallel_coordinates(data, labels, curves=False, colorbar=False)
+    plt.show()
+    colormap = plt.get_cmap('Pastel2')
+    styles = [dict(color=colormap(0), linestyle='dashed', linewidth=6.75),
+              dict(color='orange', linestyle='solid', linewidth=0.75),
+              dict(linestyle='dotted', linewidth=1.75),
+              dict(linestyle='dashed', linewidth=2.5),
+              dict(color=colormap(2), linestyle='dashdot', linewidth=5, 
+                   marker='D', markersize=12)]
+    parallel_coordinates(
+        data, labels, curves=False, colorbar=False, styles=styles)
     plt.show()
